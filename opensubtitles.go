@@ -37,7 +37,7 @@ func (o *OpenSubtitles) headers() http.Header {
 	h.Set("Accept", "application/json")
 	h.Set("Content-Type", "application/json")
 	// the API rejects requests without a client string
-	h.Set("User-Agent", "subtitles/1.0")
+	h.Set("User-Agent", "m314ss/1.0")
 	return h
 }
 

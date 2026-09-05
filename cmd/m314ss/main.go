@@ -1,26 +1,26 @@
-// Command subtitles finds a subtitle for a video, checks it belongs to that
+// Command m314ss finds a subtitle for a video, checks it belongs to that
 // video, and writes it out in sync.
 //
-//	subtitles -tmdb 1396 -s 1 -e 1 -lang ar -video Breaking.Bad.S01E01.mkv
+//	m314ss -tmdb 1396 -s 1 -e 1 -lang ar -video Breaking.Bad.S01E01.mkv
 //
 // Already have a subtitle and only want it checked and retimed (no API key
 // needed):
 //
-//	subtitles -srt my.srt -video Breaking.Bad.S01E01.mkv
+//	m314ss -srt my.srt -video Breaking.Bad.S01E01.mkv
 //
 // No ids? The filename gets resolved to a title first (subdl pro):
 //
-//	subtitles -lang ar -video "that.movie.2021.WEBRip.mkv"
+//	m314ss -lang ar -video "that.movie.2021.WEBRip.mkv"
 //
 // AI stuff, all subdl pro:
 //
-//	subtitles -translate <nId> -lang fa -tone faithful
-//	subtitles -transcribe https://host/episode.mp3 -lang en
-//	subtitles -identify "that.movie.2021.WEBRip.mkv"
+//	m314ss -translate <nId> -lang fa -tone faithful
+//	m314ss -transcribe https://host/episode.mp3 -lang en
+//	m314ss -identify "that.movie.2021.WEBRip.mkv"
 //
 // As a service, so callers need the video but not the API keys:
 //
-//	subtitles -serve :8081
+//	m314ss -serve :8081
 //
 // Keys come from the environment: SUBDL_API_KEY, OPENSUBTITLES_API_KEY,
 // OPENSUBTITLES_USER, OPENSUBTITLES_PASS. Either source alone works. The AI

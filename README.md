@@ -29,11 +29,11 @@ correction falls out of the same measurement.
 ## CLI
 
 ```
-go build ./cmd/subtitles
+go build ./cmd/m314ss
 export SUBDL_API_KEY=...
 export OPENSUBTITLES_API_KEY=... OPENSUBTITLES_USER=... OPENSUBTITLES_PASS=...   # optional
 
-subtitles -tmdb 1396 -s 1 -e 1 -lang ar -video Breaking.Bad.S01E01.mkv
+m314ss -tmdb 1396 -s 1 -e 1 -lang ar -video Breaking.Bad.S01E01.mkv
 ```
 
 Writes `Breaking.Bad.S01E01.ar.srt`, already shifted. Exit code 1 if nothing
@@ -55,7 +55,7 @@ Already have a subtitle and only want it checked and retimed? No API key
 needed:
 
 ```
-subtitles -srt my.srt -video Breaking.Bad.S01E01.mkv
+m314ss -srt my.srt -video Breaking.Bad.S01E01.mkv
 ```
 
 Exit 1 if it doesn't fit the video.
@@ -106,7 +106,7 @@ pays for the candidates that actually get tried.
 ## HTTP service
 
 ```
-subtitles -serve :8081
+m314ss -serve :8081
 ```
 
 `POST /subtitle` takes the same fields as `Query` plus `onsets` and `windows`
