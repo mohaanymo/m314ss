@@ -51,6 +51,15 @@ matched. Other useful flags:
 Skipping `-video` still works but then nothing is verified and you get
 whatever downloads first.
 
+Already have a subtitle and only want it checked and retimed? No API key
+needed:
+
+```
+subtitles -srt my.srt -video Breaking.Bad.S01E01.mkv
+```
+
+Exit 1 if it doesn't fit the video.
+
 ## Library
 
 ```go

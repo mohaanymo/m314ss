@@ -3,6 +3,11 @@
 //
 //	subtitles -tmdb 1396 -s 1 -e 1 -lang ar -video Breaking.Bad.S01E01.mkv
 //
+// Already have a subtitle and only want it checked and retimed (no API key
+// needed):
+//
+//	subtitles -srt my.srt -video Breaking.Bad.S01E01.mkv
+//
 // No ids? The filename gets resolved to a title first (subdl pro):
 //
 //	subtitles -lang ar -video "that.movie.2021.WEBRip.mkv"
@@ -49,6 +54,7 @@ func main() {
 		episode = flag.Int("e", 0, "episode number")
 		lang    = flag.String("lang", "ar", "language code (target language for -translate)")
 		video   = flag.String("video", "", "video to verify and sync against (strongly recommended)")
+		srt     = flag.String("srt", "", "local subtitle to sync against -video instead of searching")
 		out     = flag.String("o", "", "output path (default: <video>.<lang>.srt)")
 		tries   = flag.Int("tries", 3, "candidates to try per source")
 		ffmpeg  = flag.String("ffmpeg", "", "path to ffmpeg (default: PATH)")
@@ -62,6 +68,28 @@ func main() {
 
 	if *ffmpeg != "" {
 		subtitles.UseFFmpeg(*ffmpeg)
+	}
+	if *srt != "" {
+		if *video == "" {
+			fail("-srt needs -video")
+		}
+		data, err := os.ReadFile(*srt)
+		if err != nil {
+			fail(err.Error())
+		}
+		res, fixed, err := subtitles.Sync(*video, data)
+		if err != nil {
+			fail(err.Error())
+		}
+		if !res.Matched() {
+			fail(fmt.Sprintf("subtitle does not fit this video (sigma %.1f, need %.1f)", res.Sigma(), subtitles.MinSigma))
+		}
+		dst := destination(*out, *video, *lang)
+		if err := os.WriteFile(dst, fixed, 0o644); err != nil {
+			fail(err.Error())
+		}
+		fmt.Printf("%s  (sigma %.1f, %+.2fs)\n", dst, res.Sigma(), res.Offset)
+		return
 	}
 	// subdl first, it's unmetered. opensubtitles backs it up for the stuff
 	// subdl doesn't have.
