@@ -6,9 +6,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/mohaanymo/m314-sub/audio"
-	"github.com/mohaanymo/m314-sub/srt"
-	"github.com/mohaanymo/m314-sub/vad"
+	"github.com/mohaanymo/m314ss/audio"
+	"github.com/mohaanymo/m314ss/srt"
+	"github.com/mohaanymo/m314ss/vad"
 )
 
 const (

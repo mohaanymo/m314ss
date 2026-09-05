@@ -1,17 +1,17 @@
-# m314-sub
+# m314ss
 
 Finds a subtitle for a video, checks that it actually belongs to that video,
 and fixes the timing. Go library and CLI. Only external dependency is `ffmpeg`
 on PATH.
 
 ```
-go get github.com/mohaanymo/m314-sub
+go get github.com/mohaanymo/m314ss
 ```
 
 The package is named `subtitles`, so import it with an alias:
 
 ```go
-import subtitles "github.com/mohaanymo/m314-sub"
+import subtitles "github.com/mohaanymo/m314ss"
 ```
 
 ## The problem

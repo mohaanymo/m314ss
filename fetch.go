@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mohaanymo/m314-sub/srt"
+	"github.com/mohaanymo/m314ss/srt"
 )
 
 // Client searches sources in order and returns the first subtitle the audio

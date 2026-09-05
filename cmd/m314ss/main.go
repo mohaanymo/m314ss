@@ -40,7 +40,7 @@ import (
 	"strings"
 	"time"
 
-	subtitles "github.com/mohaanymo/m314-sub"
+	subtitles "github.com/mohaanymo/m314ss"
 )
 
 func main() {
