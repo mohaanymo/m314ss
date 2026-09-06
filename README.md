@@ -1,175 +1,303 @@
 # m314ss
 
-Finds a subtitle for a video, checks that it actually belongs to that video,
-and fixes the timing. Go library and CLI. Only external dependency is `ffmpeg`
-on PATH.
+**Does this subtitle actually match this video?**
 
+`m314ss` is a Go library and CLI for verifying and synchronizing subtitles against the **actual audio of a video**.
+
+Give it a video and an SRT and it will try to determine whether the subtitle is really synchronized with that video. If it is, m314ss also calculates the timing offset and fixes it automatically.
+
+It doesn't need filenames, release names, hashes, or metadata to make that decision.
+
+It listens to the video.
+
+## The idea
+
+A subtitle that belongs to a video should have a relationship with its audio: subtitle cues tend to begin around moments where speech begins.
+
+m314ss extracts speech onsets from the video's audio and compares them with the subtitle cue timings.
+
+But simply counting how many cues land near speech isn't reliable. Different movies have very different amounts of dialogue, music, noise, overlapping speech, etc.
+
+Instead, m314ss searches thousands of possible timing offsets and looks at the **shape of the entire search**.
+
+A real match tends to produce a clear spike around one particular offset.
+
+A wrong subtitle tends to produce noise without a convincing winner.
+
+m314ss measures how far the winning offset stands out from the normal background (`sigma`) together with how much it improves over chance (`lift`). Both have to pass the acceptance threshold before the subtitle is considered a match.
+
+If it passes, the winning offset is also the amount needed to synchronize the subtitle.
+
+So the same algorithm answers both questions:
+
+> **Does this subtitle match the video?**
+> **If yes, how much should it be shifted?**
+
+## Quick start
+
+The only external dependency is **FFmpeg** available on `PATH`.
+
+```bash
+go install github.com/mohaanymo/m314ss/cmd/m314ss@latest
 ```
+
+Then:
+
+```bash
+m314ss -srt subtitle.srt -video movie.mkv
+```
+
+If the subtitle matches, m314ss applies the detected offset and writes the synchronized subtitle.
+
+If it doesn't match, it is rejected.
+
+No subtitle provider or API key is needed for this mode.
+
+## Finding subtitles automatically
+
+m314ss can also search for subtitles and run every candidate through the same audio verification.
+
+Currently supported:
+
+* SubDL
+* OpenSubtitles
+
+For example:
+
+```bash
+export SUBDL_API_KEY=...
+
+m314ss \
+  -tmdb 1396 \
+  -s 1 \
+  -e 1 \
+  -lang ar \
+  -video Breaking.Bad.S01E01.mkv
+```
+
+If a candidate passes verification, m314ss writes:
+
+```text
+Breaking.Bad.S01E01.ar.srt
+```
+
+already synchronized to the video.
+
+You can also search using IMDb:
+
+```bash
+m314ss \
+  -imdb tt0903747 \
+  -s 1 \
+  -e 1 \
+  -lang en \
+  -video episode.mkv
+```
+
+or title/year:
+
+```bash
+m314ss \
+  -title "Movie Name" \
+  -year 2024 \
+  -lang en \
+  -video movie.mkv
+```
+
+SubDL and OpenSubtitles are intentionally just **sources of candidates**.
+
+They help m314ss find subtitles, but they are not what decides whether a subtitle is correct.
+
+The audio matcher does.
+
+## How matching works
+
+m314ss samples the video's audio using FFmpeg and extracts sparse **speech onset timestamps** using an energy-based VAD.
+
+For longer videos it samples multiple windows across the runtime instead of decoding the entire file.
+
+For each subtitle candidate:
+
+1. Parse its cue start timestamps.
+2. Slide those timestamps from **-120s to +120s**.
+3. Test offsets in **50ms steps**.
+4. Count cue starts that fall within **350ms** of a detected speech onset.
+5. Measure the score across every tested offset.
+6. Find the strongest offset.
+7. Compare that peak against the background distribution.
+
+The result contains:
+
+```text
+Offset
+HitRate
+Baseline
+StdDev
+Sigma
+Lift
+```
+
+The important part is that m314ss doesn't trust `HitRate` by itself.
+
+A noisy or dialogue-heavy video can produce lots of accidental matches even with the wrong subtitle.
+
+Instead:
+
+```text
+sigma = (best hit rate - baseline) / standard deviation
+```
+
+A genuine match should produce an offset that stands out clearly from all the alternatives.
+
+The current matcher requires both:
+
+```text
+Sigma >= 5.0
+Lift  >= 0.05
+```
+
+before accepting the subtitle.
+
+## What m314ss can fix
+
+Currently m314ss corrects **constant timing offsets**.
+
+For example, if the entire subtitle is consistently 4.7 seconds late, the matcher can detect that relationship and shift every cue accordingly.
+
+It intentionally does **not** try to hide other synchronization problems.
+
+A subtitle that progressively drifts because it was timed for a different framerate is not a constant-offset problem. m314ss will reject it rather than partially fixing it and pretending the subtitle is synchronized.
+
+## Use as a Go library
+
+```bash
 go get github.com/mohaanymo/m314ss
 ```
 
-The package is named `subtitles`, so import it with an alias:
+The package name is `subtitles`:
 
 ```go
 import subtitles "github.com/mohaanymo/m314ss"
 ```
 
-## The problem
-
-Subtitle sites have dozens of files per title, cut for different releases,
-and their episode tagging is not trustworthy. The most downloaded "S01E01"
-file for one show I tried was actually episode 2. Nothing in the metadata
-tells you that.
-
-The audio does. If a subtitle belongs to a video, its cue start times line up
-with the moments speech begins. If it doesn't, they don't. So every candidate
-gets checked against the video's audio before it's accepted, and the offset
-correction falls out of the same measurement.
-
-## CLI
-
-```
-go build ./cmd/m314ss
-export SUBDL_API_KEY=...
-export OPENSUBTITLES_API_KEY=... OPENSUBTITLES_USER=... OPENSUBTITLES_PASS=...   # optional
-
-m314ss -tmdb 1396 -s 1 -e 1 -lang ar -video Breaking.Bad.S01E01.mkv
-```
-
-Writes `Breaking.Bad.S01E01.ar.srt`, already shifted. Exit code 1 if nothing
-matched. Other useful flags:
-
-| flag | |
-|---|---|
-| `-imdb tt0903747` | search by IMDb id instead of TMDB |
-| `-title "..." -year 2021` | free text search when you have no id |
-| `-o path` | output path |
-| `-tries N` | candidates to download per source before giving up (default 3) |
-| `-ffmpeg path` | ffmpeg binary, if not on PATH |
-| `-serve :8081` | run as an HTTP service, see below |
-
-Skipping `-video` still works but then nothing is verified and you get
-whatever downloads first.
-
-Already have a subtitle and only want it checked and retimed? No API key
-needed:
-
-```
-m314ss -srt my.srt -video Breaking.Bad.S01E01.mkv
-```
-
-Exit 1 if it doesn't fit the video.
-
-## Library
+To verify and synchronize an existing SRT:
 
 ```go
-speech, err := subtitles.Listen("/media/Breaking.Bad.S01E01.mkv")
+result, fixed, err := subtitles.Sync(videoPath, srtBytes)
+if err != nil {
+    // subtitle did not match, or another error occurred
+}
+```
 
-c := subtitles.Client{
+You can also analyze the video once:
+
+```go
+speech, err := subtitles.Listen("movie.mkv")
+```
+
+and then test many subtitle candidates against it:
+
+```go
+for _, candidate := range candidates {
+    result, fixed, err := speech.Match(candidate)
+    if err != nil {
+        continue
+    }
+
+    if result.Matched() {
+        // this subtitle matches the video
+    }
+}
+```
+
+Audio extraction is the expensive part. Once the video has been analyzed, testing additional subtitle candidates is cheap.
+
+## Using subtitle sources
+
+```go
+speech, err := subtitles.Listen("episode.mkv")
+if err != nil {
+    log.Fatal(err)
+}
+
+client := subtitles.Client{
     Sources: []subtitles.Source{
-        &subtitles.SubDL{APIKey: subdlKey},
-        &subtitles.OpenSubtitles{APIKey: osKey, Username: u, Password: p},
+        &subtitles.SubDL{
+            APIKey: subdlKey,
+        },
+        &subtitles.OpenSubtitles{
+            APIKey:   osKey,
+            Username: username,
+            Password: password,
+        },
     },
-    Speech: speech, // nil skips verification
-    Log:    func(s string) { log.Println(s) },
+
+    Speech: speech,
 }
 
-res, err := c.Fetch(ctx, subtitles.Query{TMDBID: 1396, Season: 1, Episode: 1, Lang: "ar"})
+result, err := client.Fetch(ctx, subtitles.Query{
+    TMDBID:  1396,
+    Season:  1,
+    Episode: 1,
+    Lang:    "ar",
+})
+
 if errors.Is(err, subtitles.ErrNoMatch) {
-    // nothing on offer was for this video. ship without a subtitle
-    // rather than attach a wrong one.
-}
-os.WriteFile(dst, res.Data, 0o644)
-```
-
-`Listen` is the expensive part (a few seconds of ffmpeg). Matching is
-milliseconds, so keep the `Speech` around and test as many candidates as you
-want against it:
-
-```go
-for _, data := range candidates {
-    res, fixed, _ := speech.Match(data)
-    if res.Matched() { ... }
+    // candidates were found, but none convincingly matched the video
 }
 ```
 
-Already have a subtitle and only want it retimed:
-
-```go
-res, fixed, err := subtitles.Sync(videoPath, srtBytes)
-```
-
-Adding a source means implementing `Find(ctx, Query) ([]Candidate, error)`.
-Downloading is deferred behind `Candidate.Fetch` so a metered source only
-pays for the candidates that actually get tried.
+Additional subtitle providers can be added by implementing the `Source` interface.
 
 ## HTTP service
 
-```
+m314ss can also run as an HTTP service:
+
+```bash
 m314ss -serve :8081
 ```
 
-`POST /subtitle` takes the same fields as `Query` plus `onsets` and `windows`
-from the caller's own `Listen`. The caller does the listening and sends a few
-hundred floats, the service does the searching. That keeps site credentials
-off every user's machine while the party holding the video still decides what
-counts as a match.
+Endpoints:
 
-```
-POST /subtitle    {"tmdb_id":1396,"season":1,"episode":1,"lang":"ar","onsets":[...],"windows":[[...]]}
+```text
+POST /subtitle
 GET  /health
 ```
 
-The reply carries the SRT, source, release name, offset, hit rate, baseline and
-sigma. 404 when nothing matched. There is no auth, put it behind whatever
-already authenticates your callers.
+The client can analyze the video locally and send only the resulting onset/window data to the server.
 
-## Sources
+This means the machine holding the video still performs the audio analysis, while the server can handle subtitle providers and keep their credentials centralized.
 
-**SubDL** goes first. Downloads aren't metered on the free tier (2000
-searches/day) and one download usually returns a whole season pack, which the
-episode picker then extracts from. Its catalogue has holes on niche and older
-titles.
+## Current limitations
 
-**OpenSubtitles** covers those holes. Downloads are capped (20/day free, 1000
-on VIP) so it goes second and only gets hit once subdl has come back empty.
+m314ss is still young and the matcher will continue to be tested and tuned against more material.
 
-Either one alone is enough to run.
+Currently:
 
-## How the matching works
+* SRT subtitles are supported.
+* Only constant offsets are corrected.
+* The offset search is limited to ±120 seconds.
+* FFmpeg is required.
+* Difficult audio can make matching harder.
+* A subtitle with progressive timing drift is rejected rather than retimed.
 
-Speech onsets are pulled from a sample of the audio (ten 180 second windows
-spread over the runtime, or the whole thing if it's short) using a simple
-energy threshold VAD. Then the subtitle's cue starts are slid against them in
-50ms steps over a +/-120s range to find the offset that explains the most cues.
+If you find a case where:
 
-Two things it deliberately does not do:
+* a correct subtitle is rejected,
+* a wrong subtitle is accepted,
+* or the calculated offset is wrong,
 
-- Compare speech/silence masks. With a continuous score the speech mask is
-  ~80% true, every offset overlaps about equally and the winner is noise. I
-  got +4.6s for a subtitle whose real offset was -110s. Onsets stay sparse no
-  matter how loud the film is.
-- Gate on raw hit rate. A correct subtitle scores ~58% on a clean live action
-  film but only ~42% on a low bitrate cartoon, which is below what a *wrong*
-  subtitle scores on the easier film. The gate is sigma (how far the best
-  offset stands out from every other offset tried) plus a minimum lift over
-  chance. See `MinSigma` and `MinLift` in `align.go` for the numbers.
+please open an issue and include as much information about the video/subtitle pair as possible.
 
-Only constant offsets are corrected. A subtitle timed for a different
-framerate drifts linearly and will be rejected rather than half fixed.
+Those cases are especially useful for improving the matcher.
 
-## SubDL pro / AI
+## Why `m314ss`?
 
-`ai.go` implements subdl's v2 endpoints: translate a subtitle into a language
-nobody uploaded, transcribe a media URL, resolve a release filename to a
-title. With `Client.TranslateWith` set, a title with no Arabic subtitle gets
-searched in other languages, verified against the audio the same way, and the
-one that fits gets translated.
+Because subtitle metadata can tell you what a file *claims* to be.
 
-As of writing the v2 API is not deployed (every path 404s, with or without a
-key) so this code follows their docs but hasn't been run against a live
-endpoint. The translation fallback degrades to `ErrNoMatch` until then.
+**m314ss tries to determine whether its timing actually fits the video.**
 
 ## License
 
 MIT
+
