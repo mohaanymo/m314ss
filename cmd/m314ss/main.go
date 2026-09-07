@@ -88,7 +88,7 @@ func main() {
 		if err := os.WriteFile(dst, fixed, 0o644); err != nil {
 			fail(err.Error())
 		}
-		fmt.Printf("%s  (sigma %.1f, %+.2fs)\n", dst, res.Sigma(), res.Offset)
+		fmt.Printf("%s  (sigma %.1f, %s)\n", dst, res.Sigma(), res.Correction())
 		return
 	}
 	// subdl first, it's unmetered. opensubtitles backs it up for the stuff
@@ -207,8 +207,8 @@ func main() {
 	if err := os.WriteFile(dst, res.Data, 0o644); err != nil {
 		fail(err.Error())
 	}
-	fmt.Printf("%s  (%s: %s, sigma %.1f, %+.2fs)\n",
-		dst, res.Source, res.Release, res.Sync.Sigma(), res.Sync.Offset)
+	fmt.Printf("%s  (%s: %s, sigma %.1f, %s)\n",
+		dst, res.Source, res.Release, res.Sync.Sigma(), res.Sync.Correction())
 }
 
 // waitAndFetch blocks until an AI job is ready. Jobs usually finish inside a

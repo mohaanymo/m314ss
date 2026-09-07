@@ -70,3 +70,30 @@ func TestAlignIgnoresUnsampledAudio(t *testing.T) {
 		t.Fatalf("offset = %+.2f, want within %.2f of 0", a.Offset, tolerance)
 	}
 }
+
+// A subtitle timed for a 25fps cut, played on a 24fps one. Every cue is a
+// little later than the last, 120s out by the end. A plain offset search
+// can't explain that, the rate ratio has to be found.
+func TestAlignDrift(t *testing.T) {
+	rng := rand.New(rand.NewSource(3))
+	onsets := speech(rng, 3000)
+
+	const late = 12.0
+	var cues []float64
+	for _, o := range onsets {
+		if rng.Float64() < 0.75 {
+			cues = append(cues, o*24/25+late+rng.NormFloat64()*0.08)
+		}
+	}
+
+	a := Align(cues, onsets, nil)
+	if a.Scale != 25.0/24 {
+		t.Fatalf("scale = %v (sigma %.2f), want 25/24", a.Scale, a.Sigma())
+	}
+	if want := -late * 25 / 24; math.Abs(a.Offset-want) > 0.1 {
+		t.Fatalf("offset = %+.2f, want %+.2f", a.Offset, want)
+	}
+	if !a.Matched() {
+		t.Fatalf("sigma %.2f should have cleared %.2f", a.Sigma(), MinSigma)
+	}
+}

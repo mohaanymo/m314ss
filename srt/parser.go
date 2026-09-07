@@ -54,12 +54,12 @@ func Starts(cues []Cue) []float64 {
 	return out
 }
 
-// Shift moves every timestamp by seconds, leaving text alone. Negative
-// results clamp to zero.
-func Shift(data []byte, seconds float64) []byte {
+// Retime turns every timestamp t into t*scale + shift, leaving text alone.
+// Negative results clamp to zero.
+func Retime(data []byte, scale, shift float64) []byte {
 	return tsRe.ReplaceAllFunc(data, func(m []byte) []byte {
 		t, _ := parseTime(string(m))
-		if t += seconds; t < 0 {
+		if t = t*scale + shift; t < 0 {
 			t = 0
 		}
 		ms := int(t*1000 + 0.5)

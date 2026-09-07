@@ -27,7 +27,8 @@ func UseFFmpeg(path string) { audio.FFmpeg = path }
 // of the runtime were actually decoded.
 //
 // Building one costs a few seconds of ffmpeg. Matching a subtitle against it
-// is milliseconds, so build once and test as many candidates as you want.
+// is well under a second, so build once and test as many candidates as you
+// want.
 type Speech struct {
 	Onsets   []float64
 	Windows  [][2]float64
@@ -101,11 +102,11 @@ func (s *Speech) Match(data []byte) (SyncResult, []byte, error) {
 	}
 	a := Align(srt.Starts(cues), s.Onsets, s.Windows)
 	res := SyncResult{Alignment: a}
-	if !a.Matched() || math.Abs(a.Offset) < minShift {
+	if !a.Matched() || (a.Scale == 1 && math.Abs(a.Offset) < minShift) {
 		return res, data, nil
 	}
 	res.Shifted = true
-	return res, srt.Shift(data, a.Offset), nil
+	return res, srt.Retime(data, a.Scale, a.Offset), nil
 }
 
 // Sync is Listen followed by Match, for when you only have one subtitle.

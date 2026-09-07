@@ -1,8 +1,10 @@
 package subtitles
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"sync"
 )
 
 const (
@@ -16,7 +18,10 @@ const (
 
 // Alignment is the result of matching one subtitle against one video.
 type Alignment struct {
-	Offset float64 // seconds to add to every timestamp
+	// a cue at t belongs at t*Scale + Offset. Scale is 1 unless the
+	// subtitle drifts, see frameRates.
+	Scale  float64
+	Offset float64
 
 	// HitRate is the fraction of cue starts explained at Offset. Baseline and
 	// StdDev are the mean and spread of that rate across every offset tried,
@@ -51,6 +56,15 @@ func (a Alignment) Sigma() float64 {
 	return (a.HitRate - a.Baseline) / a.StdDev
 }
 
+// Correction is the fix in words, for logs: "+4.70s", or "+4.70s x1.042"
+// when the subtitle also drifts.
+func (a Alignment) Correction() string {
+	if a.Scale == 1 {
+		return fmt.Sprintf("%+.2fs", a.Offset)
+	}
+	return fmt.Sprintf("%+.2fs x%.4g", a.Offset, a.Scale)
+}
+
 // Matched reports whether the subtitle belongs to this video.
 //
 // Both gates are needed. Sigma alone let a film's subtitle through against a
@@ -59,8 +73,59 @@ func (a Alignment) Sigma() float64 {
 // and every right one clears both.
 func (a Alignment) Matched() bool { return a.Sigma() >= MinSigma && a.Lift() >= MinLift }
 
-// Align finds the offset that best explains the subtitle's cue starts given
-// the video's speech onsets.
+// Frame rates a subtitle may have been timed against. A file timed for a
+// 25fps cut and played on a 24fps one starts fine and is 225s late by the
+// end of a 90 minute film. No single offset fixes that, so Align also tries
+// every ratio of these. 29.97 and 30 aren't here on purpose: getting to
+// those from 24 is pulldown, which keeps the running time, so nothing
+// drifts.
+var frameRates = []float64{23.976, 24, 25}
+
+// Align finds the scale and offset that best explain the subtitle's cue
+// starts given the video's speech onsets.
+//
+// Scale 1 wins ties, a rate ratio has to give a strictly sharper spike. Each
+// extra ratio is one more chance for a wrong subtitle to find a noise peak;
+// the gate hasn't been re-measured with them in.
+func Align(cues, onsets []float64, windows [][2]float64) Alignment {
+	if len(cues) == 0 || len(onsets) == 0 {
+		return Alignment{Scale: 1}
+	}
+	scales := []float64{1}
+	for _, from := range frameRates {
+		for _, to := range frameRates {
+			if from != to {
+				scales = append(scales, from/to)
+			}
+		}
+	}
+	// each slide is a quarter second on a two hour film, so run them side
+	// by side
+	found := make([]Alignment, len(scales))
+	var wg sync.WaitGroup
+	for i, s := range scales {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scaled := make([]float64, len(cues))
+			for j, c := range cues {
+				scaled[j] = c * s
+			}
+			found[i] = slide(scaled, onsets, windows)
+			found[i].Scale = s
+		}()
+	}
+	wg.Wait()
+	best := found[0]
+	for _, a := range found[1:] {
+		if a.Sigma() > best.Sigma() {
+			best = a
+		}
+	}
+	return best
+}
+
+// slide finds the offset that best explains the cue starts.
 //
 // It compares onsets, not speech/silence masks. Masks fail on real material:
 // with a continuous score the speech mask is ~80% true, every offset overlaps
@@ -72,10 +137,7 @@ func (a Alignment) Matched() bool { return a.Sigma() >= MinSigma && a.Lift() >= 
 // length} pairs; pass nil if the whole thing was decoded.
 //
 // onsets must be sorted.
-func Align(cues, onsets []float64, windows [][2]float64) Alignment {
-	if len(cues) == 0 || len(onsets) == 0 {
-		return Alignment{}
-	}
+func slide(cues, onsets []float64, windows [][2]float64) Alignment {
 	// don't trust a rate computed off a handful of cues
 	minJudged := len(cues) / 10
 	if minJudged < 20 {

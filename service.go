@@ -43,6 +43,7 @@ type Response struct {
 	Source   string  `json:"source"`
 	Release  string  `json:"release"`
 	Offset   float64 `json:"offset"`
+	Scale    float64 `json:"scale"` // 1 unless the subtitle drifted
 	HitRate  float64 `json:"hit_rate"`
 	Baseline float64 `json:"baseline"`
 	Sigma    float64 `json:"sigma"`
@@ -107,6 +108,7 @@ func Handler(sources []Source, logger *log.Logger) http.Handler {
 		json.NewEncoder(w).Encode(Response{
 			SRT: string(res.Data), Source: res.Source, Release: res.Release,
 			Offset:   res.Sync.Offset,
+			Scale:    cmp.Or(res.Sync.Scale, 1),
 			HitRate:  res.Sync.HitRate,
 			Baseline: res.Sync.Baseline,
 			Sigma:    res.Sync.Sigma(),

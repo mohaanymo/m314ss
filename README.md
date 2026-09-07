@@ -125,10 +125,12 @@ For each subtitle candidate:
 5. Measure the score across every tested offset.
 6. Find the strongest offset.
 7. Compare that peak against the background distribution.
+8. Repeat with the timestamps scaled by each framerate ratio (23.976, 24, 25) and keep the sharpest peak.
 
 The result contains:
 
 ```text
+Scale
 Offset
 HitRate
 Baseline
@@ -160,13 +162,13 @@ before accepting the subtitle.
 
 ## What m314ss can fix
 
-Currently m314ss corrects **constant timing offsets**.
+m314ss corrects **constant timing offsets** and **framerate drift**.
 
-For example, if the entire subtitle is consistently 4.7 seconds late, the matcher can detect that relationship and shift every cue accordingly.
+If the entire subtitle is consistently 4.7 seconds late, the matcher detects that and shifts every cue accordingly.
 
-It intentionally does **not** try to hide other synchronization problems.
+If the subtitle was timed for a 25 fps cut and the video is 24 fps, it starts in sync and ends minutes out. That is not an offset problem, so the matcher also tries every ratio of 23.976, 24 and 25 fps and keeps whichever gives the sharpest peak. The cue times are scaled by that ratio before the offset is applied.
 
-A subtitle that progressively drifts because it was timed for a different framerate is not a constant-offset problem. m314ss will reject it rather than partially fixing it and pretending the subtitle is synchronized.
+It intentionally does **not** try to hide other synchronization problems. A subtitle timed for a different cut of the film (extra scenes, missing scenes) is rejected rather than partially fixed.
 
 ## Use as a Go library
 
@@ -275,11 +277,10 @@ m314ss is still young and the matcher will continue to be tested and tuned again
 Currently:
 
 * SRT subtitles are supported.
-* Only constant offsets are corrected.
+* Only constant offsets and framerate drift are corrected. A subtitle for a different cut is rejected.
 * The offset search is limited to ±120 seconds.
 * FFmpeg is required.
 * Difficult audio can make matching harder.
-* A subtitle with progressive timing drift is rejected rather than retimed.
 
 If you find a case where:
 

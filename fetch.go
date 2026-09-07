@@ -176,7 +176,7 @@ func (c *Client) translate(ctx context.Context, res Result, lang string) (Result
 		case err == nil && m.Matched():
 			out.Data, out.Sync = fixed, m
 		case res.Sync.Shifted:
-			out.Data = srt.Shift(data, res.Sync.Offset)
+			out.Data = srt.Retime(data, res.Sync.Scale, res.Sync.Offset)
 		}
 	}
 	return out, nil
@@ -249,8 +249,8 @@ func (c *Client) search(ctx context.Context, q Query) (Result, error) {
 					src.Name(), cand.Release, res.Sigma(), MinSigma, 100*res.HitRate, 100*res.Baseline)
 				continue
 			}
-			logf("%s: %s: ok (sigma %.1f, %.0f%% hit vs %.0f%% by chance), offset %+.2fs",
-				src.Name(), cand.Release, res.Sigma(), 100*res.HitRate, 100*res.Baseline, res.Offset)
+			logf("%s: %s: ok (sigma %.1f, %.0f%% hit vs %.0f%% by chance), %s",
+				src.Name(), cand.Release, res.Sigma(), 100*res.HitRate, 100*res.Baseline, res.Correction())
 			return Result{Data: fixed, Source: cand.Source, Release: cand.Release,
 				Sync: res, ID: cand.ID, Lang: q.Lang}, nil
 		}
