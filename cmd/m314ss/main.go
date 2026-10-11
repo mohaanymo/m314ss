@@ -41,6 +41,7 @@ import (
 	"time"
 
 	subtitles "github.com/mohaanymo/m314ss"
+	"github.com/mohaanymo/subapi"
 )
 
 func main() {
@@ -93,17 +94,18 @@ func main() {
 	}
 	// subdl first, it's unmetered. opensubtitles backs it up for the stuff
 	// subdl doesn't have.
-	var subdl *subtitles.SubDL
-	var sources []subtitles.Source
+	var subdl *subapi.SubDL
+	var sources []subapi.Source
 	if k := os.Getenv("SUBDL_API_KEY"); k != "" {
-		subdl = &subtitles.SubDL{APIKey: k}
+		subdl = &subapi.SubDL{APIKey: k}
 		sources = append(sources, subdl)
 	}
 	if k := os.Getenv("OPENSUBTITLES_API_KEY"); k != "" {
-		sources = append(sources, &subtitles.OpenSubtitles{
-			APIKey:   k,
-			Username: os.Getenv("OPENSUBTITLES_USER"),
-			Password: os.Getenv("OPENSUBTITLES_PASS"),
+		sources = append(sources, &subapi.OpenSubtitles{
+			APIKey:    k,
+			Username:  os.Getenv("OPENSUBTITLES_USER"),
+			Password:  os.Getenv("OPENSUBTITLES_PASS"),
+			UserAgent: "m314ss/1.0",
 		})
 	}
 	if len(sources) == 0 {
@@ -162,7 +164,7 @@ func main() {
 		return
 	}
 
-	q := subtitles.Query{
+	q := subapi.Query{
 		TMDBID: *tmdb, IMDBID: *imdb, Title: *title, Year: *year,
 		Season: *season, Episode: *episode, Lang: *lang,
 	}
@@ -214,7 +216,7 @@ func main() {
 // waitAndFetch blocks until an AI job is ready. Jobs usually finish inside a
 // minute, the ceiling is generous because giving up early means redoing paid
 // work.
-func waitAndFetch(ctx context.Context, s *subtitles.SubDL, job subtitles.Job) []byte {
+func waitAndFetch(ctx context.Context, s *subapi.SubDL, job subapi.Job) []byte {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 
@@ -254,7 +256,7 @@ func indent(raw []byte) []byte {
 }
 
 // the AI subcommands are subdl features. say so instead of nil deref.
-func requireSubDL(s *subtitles.SubDL) {
+func requireSubDL(s *subapi.SubDL) {
 	if s == nil {
 		fail("this needs a subdl key: set SUBDL_API_KEY")
 	}

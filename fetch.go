@@ -8,12 +8,14 @@
 // the video before it's accepted, and the offset correction comes out of the
 // same pass.
 //
+// The searching itself is github.com/mohaanymo/subapi.
+//
 //	speech, _ := subtitles.Listen("/media/Breaking.Bad.S01E01.mkv")
-//	c := subtitles.Client{Sources: []subtitles.Source{
-//	    &subtitles.SubDL{APIKey: subdlKey},
-//	    &subtitles.OpenSubtitles{APIKey: osKey, Username: u, Password: p},
+//	c := subtitles.Client{Sources: []subapi.Source{
+//	    &subapi.SubDL{APIKey: subdlKey},
+//	    &subapi.OpenSubtitles{APIKey: osKey, Username: u, Password: p},
 //	}, Speech: speech}
-//	res, err := c.Fetch(ctx, subtitles.Query{TMDBID: 1396, Season: 1, Episode: 1, Lang: "ar"})
+//	res, err := c.Fetch(ctx, subapi.Query{TMDBID: 1396, Season: 1, Episode: 1, Lang: "ar"})
 package subtitles
 
 import (
@@ -23,12 +25,16 @@ import (
 	"strings"
 
 	"github.com/mohaanymo/m314ss/srt"
+	"github.com/mohaanymo/subapi"
 )
+
+// ErrNoMatch means every candidate was either unavailable or failed to align.
+var ErrNoMatch = errors.New("no subtitle matched this video")
 
 // Client searches sources in order and returns the first subtitle the audio
 // agrees with.
 type Client struct {
-	Sources []Source
+	Sources []subapi.Source
 
 	// How many candidates to download from one source before moving on.
 	// Downloads are the metered thing on opensubtitles. 0 means 3.
@@ -45,13 +51,13 @@ type Client struct {
 	// in other languages, verified the same way, and machine translated into
 	// the one asked for. Costs a credit and a wait, so it's opt in. Needs a
 	// SubDL pro key.
-	TranslateWith *SubDL
+	TranslateWith *subapi.SubDL
 
 	// Languages to try for the translation fallback. Empty means english
 	// first, then anything.
 	FallbackLangs []string
 
-	// Translation tone, see the Tone constants. Empty lets subdl pick.
+	// Translation tone, see the subapi Tone constants. Empty lets subdl pick.
 	Tone string
 
 	// Called with one line per candidate tried, if set.
@@ -83,7 +89,7 @@ type Result struct {
 // them, so put the cheapest source first. If nothing matches the error wraps
 // ErrNoMatch. That is a normal outcome, not a failure: ship without a
 // subtitle rather than attach a wrong one.
-func (c *Client) Fetch(ctx context.Context, q Query) (Result, error) {
+func (c *Client) Fetch(ctx context.Context, q subapi.Query) (Result, error) {
 	res, err := c.search(ctx, q)
 	if err == nil || c.TranslateWith == nil || q.Lang == "" || !errors.Is(err, ErrNoMatch) {
 		return res, err
@@ -101,9 +107,9 @@ func (c *Client) Fetch(ctx context.Context, q Query) (Result, error) {
 //
 // Transcribing when there is no subtitle in any language would be the obvious
 // next step, but subdl's endpoint wants a media_url its own servers can fetch
-// and the video never leaves the caller's machine. See SubDL.Transcribe if you
-// do have a public URL.
-func (c *Client) translateFallback(ctx context.Context, q Query, prev error) (Result, error) {
+// and the video never leaves the caller's machine. See subapi.SubDL.Transcribe
+// if you do have a public URL.
+func (c *Client) translateFallback(ctx context.Context, q subapi.Query, prev error) (Result, error) {
 	langs := c.FallbackLangs
 	if len(langs) == 0 {
 		langs = []string{"EN", ""}
@@ -195,7 +201,7 @@ func langName(lang string) string {
 	return strings.ToUpper(lang)
 }
 
-func (c *Client) search(ctx context.Context, q Query) (Result, error) {
+func (c *Client) search(ctx context.Context, q subapi.Query) (Result, error) {
 	tries := c.MaxTriesPerSource
 	if tries <= 0 {
 		tries = 3

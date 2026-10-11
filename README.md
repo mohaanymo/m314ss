@@ -216,6 +216,12 @@ Audio extraction is the expensive part. Once the video has been analyzed, testin
 
 ## Using subtitle sources
 
+The SubDL and OpenSubtitles clients live in their own package, [subapi](https://github.com/mohaanymo/subapi):
+
+```go
+import "github.com/mohaanymo/subapi"
+```
+
 ```go
 speech, err := subtitles.Listen("episode.mkv")
 if err != nil {
@@ -223,11 +229,11 @@ if err != nil {
 }
 
 client := subtitles.Client{
-    Sources: []subtitles.Source{
-        &subtitles.SubDL{
+    Sources: []subapi.Source{
+        &subapi.SubDL{
             APIKey: subdlKey,
         },
-        &subtitles.OpenSubtitles{
+        &subapi.OpenSubtitles{
             APIKey:   osKey,
             Username: username,
             Password: password,
@@ -237,7 +243,7 @@ client := subtitles.Client{
     Speech: speech,
 }
 
-result, err := client.Fetch(ctx, subtitles.Query{
+result, err := client.Fetch(ctx, subapi.Query{
     TMDBID:  1396,
     Season:  1,
     Episode: 1,
@@ -249,7 +255,7 @@ if errors.Is(err, subtitles.ErrNoMatch) {
 }
 ```
 
-Additional subtitle providers can be added by implementing the `Source` interface.
+Additional subtitle providers can be added by implementing the `subapi.Source` interface.
 
 ## HTTP service
 

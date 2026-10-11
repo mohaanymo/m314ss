@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/mohaanymo/subapi"
 )
 
 // Request is the body of POST /subtitle.
@@ -57,13 +59,13 @@ type Response struct {
 // Handler serves POST /subtitle over the given sources.
 //
 // No auth here. Put it behind whatever already authenticates your callers.
-func Handler(sources []Source, logger *log.Logger) http.Handler {
+func Handler(sources []subapi.Source, logger *log.Logger) http.Handler {
 	mux := http.NewServeMux()
 
 	// AI routes are subdl's, so they only exist if one is configured.
-	var pro *SubDL
+	var pro *subapi.SubDL
 	for _, s := range sources {
-		if sd, ok := s.(*SubDL); ok {
+		if sd, ok := s.(*subapi.SubDL); ok {
 			pro = sd
 			break
 		}
@@ -91,7 +93,7 @@ func Handler(sources []Source, logger *log.Logger) http.Handler {
 			c.Log = func(s string) { logger.Println(s) }
 		}
 
-		res, err := c.Fetch(r.Context(), Query{
+		res, err := c.Fetch(r.Context(), subapi.Query{
 			TMDBID: req.TMDBID, IMDBID: req.IMDBID, Title: req.Title, Year: req.Year,
 			Season: req.Season, Episode: req.Episode, Lang: req.Lang,
 		})
@@ -152,7 +154,7 @@ type TranscribeRequest struct {
 // apply here too. Jobs aren't waited on: a request that blocks for a minute
 // dies to somebody's proxy timeout. Poll GET /ai/translations/{id} and then
 // hit /download.
-func mountAI(mux *http.ServeMux, s *SubDL) {
+func mountAI(mux *http.ServeMux, s *subapi.SubDL) {
 	mux.HandleFunc("POST /ai/translations", func(w http.ResponseWriter, r *http.Request) {
 		var req TranslateRequest
 		if !decode(w, r, &req) {
